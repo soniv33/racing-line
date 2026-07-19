@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0e12" />
   <title>Racing Line — draw the perfect lap</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -12,33 +13,38 @@
     <p class="tagline">Draw the driving line. Physics decides how fast it really is.</p>
   </header>
 
-  <main>
-    <aside id="sidebar">
-      <section>
-        <h2>Corner</h2>
-        <div id="corner-list"></div>
-        <p id="corner-blurb"></p>
-      </section>
+  <div id="app">
+    <nav id="corner-bar">
+      <h2>Corner</h2>
+      <div id="corner-list"></div>
+    </nav>
 
-      <section>
-        <h2>Times</h2>
-        <div class="results">
-          <div class="row"><span class="label you">Your line</span><span id="your-time">–</span></div>
-          <div class="row"><span class="label best">Personal best</span><span id="best-time">–</span></div>
-          <div class="row"><span class="label optimal">Optimal line</span><span id="optimal-time">–</span></div>
-          <div class="row"><span class="label">Gap to optimal</span><span id="delta" class="delta">–</span></div>
-        </div>
-      </section>
+    <section id="stage">
+      <canvas id="track" width="940" height="560"></canvas>
+    </section>
 
-      <section class="buttons">
+    <section id="hud">
+      <p id="status">Draw your line from the green gate to the chequered flag.</p>
+      <div class="results">
+        <div class="row"><span class="label you">Your line</span><span id="your-time">–</span></div>
+        <div class="row"><span class="label best">Personal best</span><span id="best-time">–</span></div>
+        <div class="row"><span class="label optimal">Optimal line</span><span id="optimal-time">–</span></div>
+        <div class="row"><span class="label">Gap to optimal</span><span id="delta" class="delta">–</span></div>
+      </div>
+      <div class="buttons">
         <button id="optimal-btn">Show optimal</button>
         <button id="replay-btn">Replay</button>
         <button id="clear-btn">Clear line</button>
         <button id="reset-btn" class="danger">Reset best</button>
-      </section>
+      </div>
+      <p id="corner-blurb"></p>
+    </section>
 
-      <p id="status">Draw your line from the green gate to the chequered flag.</p>
+    <section id="telemetry-wrap">
+      <canvas id="telemetry" width="940" height="170"></canvas>
+    </section>
 
+    <footer id="help">
       <details>
         <summary>How scoring works</summary>
         <p>
@@ -50,17 +56,12 @@
           line trades a slightly longer path for much straighter, faster arcs.
         </p>
         <p>
-          The optimal line is computed by a minimum-curvature solver and scored
+          The optimal line is computed by a minimum-time solver and scored
           by the exact same simulation, so the comparison is fair.
         </p>
       </details>
-    </aside>
-
-    <section id="stage">
-      <canvas id="track" width="940" height="560"></canvas>
-      <canvas id="telemetry" width="940" height="170"></canvas>
-    </section>
-  </main>
+    </footer>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

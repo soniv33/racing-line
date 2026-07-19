@@ -2,12 +2,14 @@ import { CORNERS, cornerCenterline } from './corners.js';
 import {
   closestOnPolyline,
   dedupe,
+  fairPolyline,
   distToPolyline,
   dot,
   lerpPt,
   move,
   polylineLength,
   resample,
+  smoothPoints,
   sub,
   unit,
 } from './geometry.js';
@@ -25,7 +27,7 @@ import {
 } from './render.js';
 import { drawTelemetry } from './telemetry.js';
 
-const GATE_SNAP = 6; // meters of leeway for starting/ending near the gates
+const GATE_SNAP = 8; // meters of leeway for starting/ending near the gates
 const GRACE = 1.2; // meters of "kerb": slight excursions are clamped back, not rejected
 
 const COLORS = {
@@ -62,6 +64,7 @@ const state = {
   view: null,
   stroke: null, // in-progress raw stroke (meters)
   strokeOffMask: null,
+  strokeType: 'mouse', // pointerType of the active stroke
   drawing: false,
   attempt: null, // {sim} valid attempt
   invalid: null, // {line, offMask} off-track attempt for display
@@ -85,8 +88,37 @@ function setupCanvas(cnv, cssWidth, cssHeight) {
   return { width: cssWidth, height: cssHeight };
 }
 
-const trackSize = setupCanvas(canvas, 940, 560);
-const telemetrySize = setupCanvas(telemetryCanvas, 940, 170);
+const stageEl = document.getElementById('stage');
+const trackSize = { width: 940, height: 560 };
+const telemetrySize = { width: 940, height: 170 };
+
+// Size both canvases to the current layout. On small (phone) screens the
+// track canvas goes tall so a 90°-rotated corner fills a portrait display.
+function layoutCanvases() {
+  const compact = window.matchMedia('(max-width: 700px)').matches;
+  const stageWidth = Math.max(280, Math.min(stageEl.clientWidth || 940, 940));
+  trackSize.width = stageWidth;
+  trackSize.height = compact
+    ? Math.round(Math.min(Math.max(window.innerHeight * 0.62, 380), stageWidth * 1.8))
+    : 560;
+  telemetrySize.width = stageWidth;
+  telemetrySize.height = compact ? 130 : 170;
+  setupCanvas(canvas, trackSize.width, trackSize.height);
+  setupCanvas(telemetryCanvas, telemetrySize.width, telemetrySize.height);
+  if (state.track) {
+    state.view = makeView(trackSize.width, trackSize.height, [
+      ...state.track.leftEdge,
+      ...state.track.rightEdge,
+    ]);
+    updateResults();
+  }
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(layoutCanvases, 120);
+});
 
 function selectCorner(corner) {
   state.corner = corner;
@@ -164,7 +196,13 @@ function isOnTrack(p) {
 
 canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
+  try {
+    canvas.setPointerCapture(e.pointerId);
+  } catch {
+    // Synthetic or already-released pointers can't be captured; drawing
+    // still works, we just might miss moves outside the canvas.
+  }
+  state.strokeType = e.pointerType;
   state.drawing = true;
   state.attempt = null;
   state.invalid = null;
@@ -257,7 +295,17 @@ function processStroke(rawStroke) {
     setStatus('Finish your line at the chequered flag.');
     return;
   }
-  const line = prepareLine(clipped.pts);
+  // Hand jitter is a screen-space phenomenon: a couple of pixels of wobble
+  // is meters of noise when the view scale is small (phones), and the sim
+  // would punish it as phantom braking zones. Fair the stroke — smooth it
+  // hard, but keep every point within a jitter-sized tolerance of what was
+  // actually drawn so the intended shape is preserved.
+  const jitterPx = state.strokeType === 'touch' ? 5 : 2.5;
+  const tol = Math.min(1.8, Math.max(0.6, jitterPx / state.view.scale));
+  const resampled = resample(clipped.pts, 1.5);
+  const denoised = smoothPoints(resampled, state.strokeType === 'touch' ? 7 : 3);
+  const faired = fairPolyline(denoised, tol);
+  const line = prepareLine(faired);
   // Points slightly over the limit ride the kerb: clamp them back to the
   // track edge. Clear excursions invalidate the attempt.
   const limit = trackLimit();
@@ -461,9 +509,10 @@ function frame() {
 
 // ---------------------------------------------------------------------------
 
+layoutCanvases();
 buildCornerButtons();
 selectCorner(CORNERS[0]);
 requestAnimationFrame(frame);
 
 // Test hook for automated (Playwright) checks.
-window.__rl = { state, CAR };
+window.__rl = { state, CAR, trackSize };
