@@ -200,11 +200,13 @@ export function distToPolyline(p, pts) {
   return best;
 }
 
-// Closest point on a polyline, with its distance.
-export function closestOnPolyline(p, pts) {
-  let bestDist = Infinity;
-  let bestPt = pts[0];
-  for (let i = 1; i < pts.length; i++) {
+// Closest point on a polyline restricted to the point range [i0, i1].
+// Returns the match, its distance, and the index of the segment it lies on.
+export function closestOnPolylineRange(p, pts, i0, i1) {
+  let bestDist = Math.hypot(p.x - pts[i0].x, p.y - pts[i0].y);
+  let bestPt = pts[i0];
+  let bestIdx = i0;
+  for (let i = i0 + 1; i <= i1; i++) {
     const a = pts[i - 1];
     const b = pts[i];
     const abx = b.x - a.x;
@@ -216,7 +218,13 @@ export function closestOnPolyline(p, pts) {
     if (d < bestDist) {
       bestDist = d;
       bestPt = q;
+      bestIdx = i - 1;
     }
   }
-  return { point: bestPt, dist: bestDist };
+  return { point: bestPt, dist: bestDist, index: bestIdx };
+}
+
+// Closest point on a polyline, with its distance.
+export function closestOnPolyline(p, pts) {
+  return closestOnPolylineRange(p, pts, 0, pts.length - 1);
 }

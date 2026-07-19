@@ -182,7 +182,8 @@ export function drawPlainLine(ctx, view, pts, { color, width = 2.5, dash = null,
   ctx.restore();
 }
 
-// A hand stroke while drawing, with off-track samples highlighted red.
+// A hand stroke while drawing. Samples outside the corridor render dimmed —
+// a hint that they will be pulled back onto the track, never a rejection.
 export function drawStroke(ctx, view, pts, offMask) {
   ctx.save();
   ctx.lineWidth = 3;
@@ -191,7 +192,7 @@ export function drawStroke(ctx, view, pts, offMask) {
     const a = view.toPx(pts[i - 1]);
     const b = view.toPx(pts[i]);
     const off = offMask && (offMask[i - 1] || offMask[i]);
-    ctx.strokeStyle = off ? '#ef4444' : 'rgba(245, 245, 245, 0.9)';
+    ctx.strokeStyle = off ? 'rgba(148, 163, 184, 0.45)' : 'rgba(245, 245, 245, 0.9)';
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
