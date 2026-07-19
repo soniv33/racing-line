@@ -1,6 +1,8 @@
 // Personal bests, persisted per corner in localStorage.
 
-const key = (cornerId) => `racing-line/best/${cornerId}`;
+// v2: corner geometry changed (shorter approaches, wider tracks) — bests
+// stored against the old layouts are not comparable and are left behind.
+const key = (cornerId) => `racing-line/best/v2/${cornerId}`;
 
 export function loadBest(cornerId) {
   try {

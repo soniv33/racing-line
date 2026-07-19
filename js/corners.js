@@ -50,32 +50,32 @@ export const CORNERS = [
   {
     id: 'hairpin',
     name: 'Hairpin',
-    width: 12,
+    width: 14,
     heading: 0,
-    segments: [{ straight: 85 }, { arc: 180, r: 15 }, { straight: 85 }],
+    segments: [{ straight: 38 }, { arc: 180, r: 15 }, { straight: 38 }],
     blurb:
       'The slowest corner in racing. Brake deep, stay wide on entry, clip a late apex and get on the power early — the exit feeds a long straight.',
   },
   {
     id: 'ninety',
     name: '90° Corner',
-    width: 11,
+    width: 13,
     heading: 20,
-    segments: [{ straight: 80 }, { arc: -90, r: 22 }, { straight: 80 }],
+    segments: [{ straight: 35 }, { arc: -90, r: 22 }, { straight: 35 }],
     blurb:
       'The classic street-circuit right-angle. Out wide, apex late, use every centimetre of exit kerb.',
   },
   {
     id: 'chicane',
     name: 'Chicane',
-    width: 11,
+    width: 13,
     heading: 10,
     segments: [
-      { straight: 70 },
+      { straight: 32 },
       { arc: -50, r: 20 },
       { straight: 8 },
       { arc: 50, r: 20 },
-      { straight: 70 },
+      { straight: 32 },
     ],
     blurb:
       'A right-left flick. The fastest way through is to straighten it as much as the track edges allow.',
@@ -83,14 +83,14 @@ export const CORNERS = [
   {
     id: 'double-apex',
     name: 'Double Apex',
-    width: 11.5,
+    width: 13.5,
     heading: 0,
     segments: [
-      { straight: 60 },
+      { straight: 30 },
       { arc: 55, r: 30 },
       { straight: 18 },
       { arc: 55, r: 28 },
-      { straight: 60 },
+      { straight: 30 },
     ],
     blurb:
       'Two linked left-handers. Do you clip both apexes, or sweep one smooth arc through the middle?',
@@ -98,9 +98,9 @@ export const CORNERS = [
   {
     id: 'sweeper',
     name: 'Fast Sweeper',
-    width: 12,
+    width: 14,
     heading: -30,
-    segments: [{ straight: 45 }, { arc: 130, r: 55 }, { straight: 45 }],
+    segments: [{ straight: 28 }, { arc: 130, r: 55 }, { straight: 28 }],
     blurb:
       'A long, fast corner. Smoothness is everything — every extra degree of steering costs you speed.',
   },
