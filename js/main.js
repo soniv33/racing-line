@@ -1,6 +1,6 @@
 import { CORNERS, cornerCenterline } from './corners.js';
 import {
-  closestOnPolyline,
+  closestOnPolylineRange,
   dedupe,
   fairPolyline,
   distToPolyline,
@@ -28,7 +28,6 @@ import {
 import { drawTelemetry } from './telemetry.js';
 
 const GATE_SNAP = 8; // meters of leeway for starting/ending near the gates
-const GRACE = 1.2; // meters of "kerb": slight excursions are clamped back, not rejected
 
 const COLORS = {
   user: '#38bdf8',
@@ -67,7 +66,6 @@ const state = {
   strokeType: 'mouse', // pointerType of the active stroke
   drawing: false,
   attempt: null, // {sim} valid attempt
-  invalid: null, // {line, offMask} off-track attempt for display
   best: null, // {time, sim}
   optimal: null, // {sim} lazily computed per corner, cached below
   optimalCache: new Map(),
@@ -94,22 +92,32 @@ const telemetrySize = { width: 940, height: 170 };
 
 // Size both canvases to the current layout. On small (phone) screens the
 // track canvas goes tall so a 90°-rotated corner fills a portrait display.
+function isCompact() {
+  return window.matchMedia('(max-width: 700px)').matches;
+}
+
+function viewPad() {
+  return isCompact() ? 16 : 34;
+}
+
 function layoutCanvases() {
-  const compact = window.matchMedia('(max-width: 700px)').matches;
+  const compact = isCompact();
   const stageWidth = Math.max(280, Math.min(stageEl.clientWidth || 940, 940));
   trackSize.width = stageWidth;
   trackSize.height = compact
-    ? Math.round(Math.min(Math.max(window.innerHeight * 0.62, 380), stageWidth * 1.8))
+    ? Math.round(Math.min(Math.max(window.innerHeight * 0.66, 380), stageWidth * 1.8))
     : 560;
   telemetrySize.width = stageWidth;
   telemetrySize.height = compact ? 130 : 170;
   setupCanvas(canvas, trackSize.width, trackSize.height);
   setupCanvas(telemetryCanvas, telemetrySize.width, telemetrySize.height);
   if (state.track) {
-    state.view = makeView(trackSize.width, trackSize.height, [
-      ...state.track.leftEdge,
-      ...state.track.rightEdge,
-    ]);
+    state.view = makeView(
+      trackSize.width,
+      trackSize.height,
+      [...state.track.leftEdge, ...state.track.rightEdge],
+      viewPad()
+    );
     updateResults();
   }
 }
@@ -129,7 +137,8 @@ function selectCorner(corner) {
   state.view = makeView(
     trackSize.width,
     trackSize.height,
-    [...state.track.leftEdge, ...state.track.rightEdge]
+    [...state.track.leftEdge, ...state.track.rightEdge],
+    viewPad()
   );
 
   const entryT = unit(sub(center[1], center[0]));
@@ -141,7 +150,6 @@ function selectCorner(corner) {
   state.strokeOffMask = null;
   state.drawing = false;
   state.attempt = null;
-  state.invalid = null;
   state.showOptimal = false;
   state.optimal = state.optimalCache.get(corner.id) ?? null;
   state.replayStart = null;
@@ -189,9 +197,31 @@ function trackLimit() {
   return state.track.halfWidth - EDGE_MARGIN;
 }
 
-// Acceptable for drawing: inside the track, or within the kerb grace band.
+// Inside the drivable corridor (used only for the live drawing hint).
 function isOnTrack(p) {
-  return distToPolyline(p, state.centerFine) <= trackLimit() + GRACE;
+  return distToPolyline(p, state.centerFine) <= trackLimit();
+}
+
+// Project a stroke onto the drivable corridor. The cursor into the
+// centerline only moves forward, so a shortcut gesture wraps around the
+// corner along the inside edge instead of jumping straight across the
+// infield (which smoothing would turn into a cheat-fast line).
+function clampToTrack(pts) {
+  const center = state.centerFine; // ~1m spacing, so indices ≈ meters
+  const limit = trackLimit();
+  const WINDOW = 12; // meters of forward search per stroke point
+  let cursor = 0;
+  let moved = 0;
+  const out = pts.map((p) => {
+    const end = Math.min(center.length - 1, cursor + WINDOW);
+    const { point, dist, index } = closestOnPolylineRange(p, center, cursor, end);
+    cursor = index;
+    if (dist <= limit) return p;
+    moved++;
+    const f = limit / dist;
+    return { x: point.x + (p.x - point.x) * f, y: point.y + (p.y - point.y) * f };
+  });
+  return { pts: out, moved };
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -205,7 +235,6 @@ canvas.addEventListener('pointerdown', (e) => {
   state.strokeType = e.pointerType;
   state.drawing = true;
   state.attempt = null;
-  state.invalid = null;
   const p = pointerToMeters(e);
   state.stroke = [p];
   state.strokeOffMask = [!isOnTrack(p)];
@@ -216,8 +245,12 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (!state.drawing) return;
   const p = pointerToMeters(e);
+  const off = !isOnTrack(p);
+  if (off && !state.strokeOffMask[state.strokeOffMask.length - 1]) {
+    navigator.vibrate?.(30); // tactile nudge where supported
+  }
   state.stroke.push(p);
-  state.strokeOffMask.push(!isOnTrack(p));
+  state.strokeOffMask.push(off);
 });
 
 canvas.addEventListener('pointerup', (e) => {
@@ -295,6 +328,18 @@ function processStroke(rawStroke) {
     setStatus('Finish your line at the chequered flag.');
     return;
   }
+  if (polylineLength(clipped.pts) < 0.5 * state.centerLength) {
+    setStatus('Line too short — draw all the way from the green gate to the chequered flag.');
+    return;
+  }
+
+  // Keep the stroke on the track by construction — there is no rejection.
+  // Clamp twice with a resample in between so heavily clamped sections
+  // converge onto the edge arc instead of cutting chords inside it.
+  const first = clampToTrack(resample(clipped.pts, 1.5));
+  const tightened = first.moved / first.pts.length > 0.15;
+  let pts = clampToTrack(resample(first.pts, 1.5)).pts;
+
   // Hand jitter is a screen-space phenomenon: a couple of pixels of wobble
   // is meters of noise when the view scale is small (phones), and the sim
   // would punish it as phantom braking zones. Fair the stroke — smooth it
@@ -302,45 +347,16 @@ function processStroke(rawStroke) {
   // actually drawn so the intended shape is preserved.
   const jitterPx = state.strokeType === 'touch' ? 5 : 2.5;
   const tol = Math.min(1.8, Math.max(0.6, jitterPx / state.view.scale));
-  const resampled = resample(clipped.pts, 1.5);
-  const denoised = smoothPoints(resampled, state.strokeType === 'touch' ? 7 : 3);
-  const faired = fairPolyline(denoised, tol);
-  const line = prepareLine(faired);
-  // Points slightly over the limit ride the kerb: clamp them back to the
-  // track edge. Clear excursions invalidate the attempt.
-  const limit = trackLimit();
-  const offMask = new Array(line.length).fill(false);
-  let anyOff = false;
-  for (let i = 0; i < line.length; i++) {
-    const { point, dist } = closestOnPolyline(line[i], state.centerFine);
-    if (dist > limit + GRACE) {
-      offMask[i] = true;
-      anyOff = true;
-    } else if (dist > limit) {
-      const f = limit / dist;
-      line[i] = {
-        x: point.x + (line[i].x - point.x) * f,
-        y: point.y + (line[i].y - point.y) * f,
-      };
-    }
-  }
-  if (anyOff) {
-    state.invalid = { line, offMask };
-    setStatus('Off track! Fix the red sections and try again.');
-    updateResults();
-    return;
-  }
-  if (polylineLength(line) < 0.55 * state.centerLength) {
-    setStatus('Line too short — draw all the way from the green gate to the chequered flag.');
-    return;
-  }
+  pts = fairPolyline(smoothPoints(pts, state.strokeType === 'touch' ? 7 : 3), tol);
+  pts = clampToTrack(pts).pts; // smoothing may overshoot the edges slightly
 
+  const line = prepareLine(pts);
   const sim = simulate(line);
   state.attempt = { sim };
-  state.invalid = null;
   state.replayStart = performance.now();
 
   let message = `Lap ok — ${formatTime(sim.totalTime)}.`;
+  if (tightened) message += ' (Line tightened to the track edge.)';
   if (!state.best || sim.totalTime < state.best.time - 1e-4) {
     message += state.best ? ' New personal best!' : ' First time set — now beat it.';
     state.best = { time: sim.totalTime, sim };
@@ -360,7 +376,6 @@ function processStroke(rawStroke) {
 
 ui.clearBtn.addEventListener('click', () => {
   state.attempt = null;
-  state.invalid = null;
   state.replayStart = state.best || (state.showOptimal && state.optimal) ? performance.now() : null;
   setStatus('Cleared. Draw a new line.');
   updateResults();
@@ -492,9 +507,6 @@ function frame() {
   }
   if (state.attempt) {
     drawSpeedLine(ctx, state.view, state.attempt.sim);
-  }
-  if (state.invalid) {
-    drawStroke(ctx, state.view, state.invalid.line, state.invalid.offMask);
   }
   if (state.drawing && state.stroke && state.stroke.length > 1) {
     drawStroke(ctx, state.view, state.stroke, state.strokeOffMask);
