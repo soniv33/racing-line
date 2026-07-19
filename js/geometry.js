@@ -87,6 +87,50 @@ export function chaikin(pts, iterations = 1) {
   return p;
 }
 
+// Moving-average low-pass over polyline points. The window shrinks near the
+// ends so endpoints stay exactly in place.
+export function smoothPoints(pts, window) {
+  const half = Math.floor(window / 2);
+  return pts.map((p, i) => {
+    const h = Math.min(half, i, pts.length - 1 - i);
+    let sx = 0;
+    let sy = 0;
+    let c = 0;
+    for (let j = i - h; j <= i + h; j++) {
+      sx += pts[j].x;
+      sy += pts[j].y;
+      c++;
+    }
+    return { x: sx / c, y: sy / c };
+  });
+}
+
+// Smooth a polyline (Laplacian relaxation) while keeping every point within
+// `tol` meters of where it started; endpoints stay fixed. Used to remove
+// hand jitter from drawn strokes without changing the intended shape.
+export function fairPolyline(pts, tol, iterations = 150) {
+  const orig = pts;
+  const out = pts.map((p) => ({ ...p }));
+  for (let it = 0; it < iterations; it++) {
+    for (let i = 1; i < out.length - 1; i++) {
+      const mx = (out[i - 1].x + out[i + 1].x) / 2;
+      const my = (out[i - 1].y + out[i + 1].y) / 2;
+      let nx = out[i].x + 0.5 * (mx - out[i].x);
+      let ny = out[i].y + 0.5 * (my - out[i].y);
+      const dx = nx - orig[i].x;
+      const dy = ny - orig[i].y;
+      const d = Math.hypot(dx, dy);
+      if (d > tol) {
+        nx = orig[i].x + (dx / d) * tol;
+        ny = orig[i].y + (dy / d) * tol;
+      }
+      out[i].x = nx;
+      out[i].y = ny;
+    }
+  }
+  return out;
+}
+
 // Menger curvature of the circle through three points (1/radius, in 1/m).
 export function menger(a, b, c) {
   const area2 = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));

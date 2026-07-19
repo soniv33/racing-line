@@ -21,6 +21,7 @@ body {
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   min-height: 100vh;
+  overscroll-behavior: none;
 }
 
 header {
@@ -51,28 +52,33 @@ header h1::after {
   font-size: 13px;
 }
 
-main {
-  display: flex;
-  gap: 18px;
-  padding: 10px 28px 28px;
-  align-items: flex-start;
-}
-
-#sidebar {
-  width: 280px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-#sidebar h2 {
+h2 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
   margin-bottom: 8px;
 }
+
+#app {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr auto;
+  grid-template-areas:
+    'corner    stage'
+    'hud       stage'
+    'help      stage'
+    '.         telemetry';
+  gap: 12px 18px;
+  align-items: start;
+  padding: 10px 28px 28px;
+}
+
+#corner-bar { grid-area: corner; }
+#stage { grid-area: stage; min-width: 0; }
+#hud { grid-area: hud; display: flex; flex-direction: column; gap: 12px; }
+#telemetry-wrap { grid-area: telemetry; min-width: 0; }
+#help { grid-area: help; }
 
 #corner-list {
   display: flex;
@@ -86,9 +92,11 @@ button {
   border: 1px solid #2a3341;
   border-radius: 6px;
   padding: 7px 12px;
+  min-height: 36px;
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+  touch-action: manipulation;
 }
 
 button:hover {
@@ -112,7 +120,6 @@ button.danger {
 }
 
 #corner-blurb {
-  margin-top: 10px;
   font-size: 13px;
   line-height: 1.45;
   color: var(--muted);
@@ -165,36 +172,29 @@ button.danger {
   min-height: 38px;
 }
 
-details {
+#help details {
   font-size: 12.5px;
   color: var(--muted);
   line-height: 1.5;
 }
 
-details summary {
+#help summary {
   cursor: pointer;
   color: var(--text);
   font-size: 13px;
   margin-bottom: 6px;
 }
 
-details p + p {
+#help p + p {
   margin-top: 6px;
 }
 
-#stage {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-#stage canvas {
+canvas {
+  display: block;
   background: #10151a;
   border: 1px solid #232b36;
   border-radius: 10px;
   max-width: 100%;
-  height: auto;
   touch-action: none;
   cursor: crosshair;
 }
@@ -203,11 +203,91 @@ details p + p {
   cursor: default;
 }
 
-@media (max-width: 1100px) {
-  main {
-    flex-direction: column;
+/* ------------------------------------------------------------------ */
+/* Phone / portrait: single column, play-first order, tall canvas.     */
+
+@media (max-width: 700px) {
+  header {
+    padding: 10px 12px 2px;
+    gap: 10px;
   }
-  #sidebar {
-    width: 100%;
+
+  header h1 {
+    font-size: 17px;
+  }
+
+  .tagline {
+    display: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 6px 10px 20px;
+  }
+
+  #corner-bar h2 {
+    display: none;
+  }
+
+  /* Corner picker: one horizontally scrollable row of chips. */
+  #corner-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  #corner-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  #corner-list button {
+    flex-shrink: 0;
+    min-height: 40px;
+  }
+
+  #status {
+    min-height: 0;
+    font-size: 12.5px;
+  }
+
+  /* Times: four compact stat chips in a row. */
+  .results {
+    flex-direction: row;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .results .row {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 14px;
+  }
+
+  .results .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .buttons button {
+    min-height: 42px;
+    padding: 7px 4px;
+    font-size: 12.5px;
+  }
+
+  #corner-blurb {
+    font-size: 12px;
   }
 }

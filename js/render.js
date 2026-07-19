@@ -4,12 +4,24 @@ import { move, offsetPolyline, sub, unit } from './geometry.js';
 import { CAR } from './physics.js';
 
 // Fit a set of points (meters) into a canvas (CSS pixels) with padding.
+// Tries the corner as-is and rotated 90°, and keeps whichever orientation
+// fills the canvas better — so wide corners fill a portrait phone screen.
 export function makeView(width, height, pts, pad = 34) {
+  const upright = fitView(width, height, pts, pad, 0);
+  const rotated = fitView(width, height, pts, pad, -Math.PI / 2);
+  return rotated.scale > upright.scale ? rotated : upright;
+}
+
+function fitView(width, height, pts, pad, rot) {
+  // rot is either 0 or -90°; the 90° case maps (x, y) -> (y, -x).
+  const fwd = rot === 0 ? (p) => p : (p) => ({ x: p.y, y: -p.x });
+  const inv = rot === 0 ? (p) => p : (p) => ({ x: -p.y, y: p.x });
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const p of pts) {
+  for (const raw of pts) {
+    const p = fwd(raw);
     minX = Math.min(minX, p.x);
     minY = Math.min(minY, p.y);
     maxX = Math.max(maxX, p.x);
@@ -22,8 +34,12 @@ export function makeView(width, height, pts, pad = 34) {
   const oy = (height - bh * scale) / 2 - minY * scale;
   return {
     scale,
-    toPx: (p) => ({ x: ox + p.x * scale, y: oy + p.y * scale }),
-    toM: (px) => ({ x: (px.x - ox) / scale, y: (px.y - oy) / scale }),
+    rot,
+    toPx: (p) => {
+      const q = fwd(p);
+      return { x: ox + q.x * scale, y: oy + q.y * scale };
+    },
+    toM: (px) => inv({ x: (px.x - ox) / scale, y: (px.y - oy) / scale }),
   };
 }
 
@@ -191,7 +207,7 @@ export function drawCar(ctx, view, pose, { color, alpha = 1 } = {}) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(p.x, p.y);
-  ctx.rotate(pose.heading);
+  ctx.rotate(pose.heading + view.rot);
   ctx.fillStyle = color;
   ctx.strokeStyle = 'rgba(0,0,0,0.5)';
   ctx.lineWidth = 1;
